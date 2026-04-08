@@ -1,34 +1,12 @@
-import { Routes, Route } from "react-router-dom";
-
+import { Routes, Route, Navigate } from "react-router-dom";
 import Home from "./screens/Home";
-import Navbar from "./components/Navbar";
-import CoverPage from "./screens/CoverPage";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
+import "./index.css";
 
-const darkTheme = createTheme({
-  palette: {
-    mode: "dark",
-  },
-});
-
-function App() {
+export default function App() {
   return (
-    <ThemeProvider theme={darkTheme}>
-      <div>
-        <Routes>
-          <Route path="/" element={<div></div>} />
-          <Route path="/*" element={<Navbar />} />
-        </Routes>
-      </div>
-
-      <div>
-        <Routes>
-          <Route path="/" element={<CoverPage />} />
-          <Route path="/home" element={<Home />} />
-        </Routes>
-      </div>
-    </ThemeProvider>
+    <Routes>
+      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/home" element={<Home />} />
+    </Routes>
   );
 }
-
-export default App;

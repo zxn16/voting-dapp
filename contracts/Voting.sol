@@ -1,119 +1,121 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.4.0 <0.9.0;
+pragma solidity ^0.8.0;
 
-contract Election {
-    enum State {
-        NotStarted,
-        InProgress,
-        Ended
-    }
+contract Voting {
+    address public admin;
+    string public electionTitle;
+
+    uint public electionStartTime;
+    uint public electionEndTime;
+
+    bool public electionStarted;
+    bool public electionEnded;
+
+    uint public candidatesCount;
 
     struct Candidate {
-        uint256 id;
+        uint id;
         string name;
-        uint256 voteCount;
+        string party;
+        string manifesto;
+        uint voteCount;
     }
-
-    address public owner;
-    State public electionState;
 
     struct Voter {
-        uint256 id;
-        string name;
+        bool isRegistered;
+        bool hasVoted;
     }
 
-    mapping(uint256 => Candidate) candidates;
-    mapping(address => bool) voted;
+    mapping(uint => Candidate) public candidates;
+    mapping(address => Voter) public voters;
 
-    mapping(address => bool) isVoter;
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Only admin allowed");
+        _;
+    }
 
-    uint256 public candidatesCount = 0;
-
-    uint256 public votersCount = 0;
+    modifier electionActive() {
+        require(electionStarted, "Election not started");
+        require(!electionEnded, "Election ended");
+        require(block.timestamp >= electionStartTime, "Too early");
+        require(block.timestamp <= electionEndTime, "Too late");
+        _;
+    }
 
     constructor() {
-        owner = msg.sender;
-        electionState = State.NotStarted;
-        addCandidate("Candidate 1");
-        addCandidate("Candidate 2");
+        admin = msg.sender;
+        electionTitle = "UEL Blockchain Election";
     }
 
-    event Voted(uint256 indexed _candidateId);
+    function configureElection(
+        string memory _title,
+        uint _start,
+        uint _end
+    ) public onlyAdmin {
+        require(!electionStarted, "Already started");
 
-    function startElection() public {
-        require(msg.sender == owner);
-        require(electionState == State.NotStarted);
-        electionState = State.InProgress;
+        electionTitle = _title;
+        electionStartTime = _start;
+        electionEndTime = _end;
     }
 
-    function endElection() public {
-        require(msg.sender == owner);
-        require(electionState == State.InProgress);
-        electionState = State.Ended;
-    }
+    function addCandidate(
+        string memory _name,
+        string memory _party,
+        string memory _manifesto
+    ) public onlyAdmin {
+        require(!electionStarted, "Cannot add after start");
 
-    function addCandidate(string memory _name) public {
-        require(owner == msg.sender, "Only owner can add candidates");
-        require(
-            electionState == State.NotStarted,
-            "Election has already started"
-        );
-
-        candidates[candidatesCount] = Candidate(candidatesCount, _name, 0);
         candidatesCount++;
+        candidates[candidatesCount] = Candidate(
+            candidatesCount,
+            _name,
+            _party,
+            _manifesto,
+            0
+        );
     }
 
-    function addVoter(address _voter) public {
-        require(owner == msg.sender, "Only owner can add voter");
-        require(!isVoter[_voter], "Voter already added");
-        require(
-            electionState == State.NotStarted,
-            "Voter can't be added after election started"
-        );
-
-        isVoter[_voter] = true;
+    function registerVoter(address _voter) public onlyAdmin {
+        voters[_voter] = Voter(true, false);
     }
 
-    function getRole(address _current) public view returns (uint256) {
-        if (owner == _current) {
-            return 1;
-        } else if (isVoter[_current]) {
-            return 2;
-        } else {
-            return 3;
-        }
+    function startElection() public onlyAdmin {
+        require(candidatesCount > 1, "Need at least 2 candidates");
+        electionStarted = true;
     }
 
-    function vote(uint256 _candidateId) public {
-        require(
-            electionState == State.InProgress,
-            "Election is not in progress"
-        );
-        require(isVoter[msg.sender], "Non authorised user cannot vote");
-        require(!voted[msg.sender], "You have already voted");
-        require(
-            _candidateId >= 0 && _candidateId < candidatesCount,
-            "Invalid candidate ID"
-        );
+    function vote(uint _candidateId) public electionActive {
+        require(voters[msg.sender].isRegistered, "Not registered");
+        require(!voters[msg.sender].hasVoted, "Already voted");
 
+        voters[msg.sender].hasVoted = true;
         candidates[_candidateId].voteCount++;
-        voted[msg.sender] = true;
-
-        emit Voted(_candidateId);
     }
 
-    function getCandidateDetails(uint256 _candidateId)
+    function endElection() public onlyAdmin {
+        electionEnded = true;
+    }
+
+    function getElectionStatus() public view returns (string memory) {
+        if (!electionStarted) return "Not Started";
+        if (electionEnded) return "Ended";
+        if (block.timestamp < electionStartTime) return "Scheduled";
+        return "Active";
+    }
+
+    function getCandidate(uint _id)
         public
         view
-        returns (string memory, uint256)
+        returns (
+            uint,
+            string memory,
+            string memory,
+            string memory,
+            uint
+        )
     {
-        require(
-            _candidateId >= 0 && _candidateId < candidatesCount,
-            "Invalid candidate ID"
-        );
-        return (
-            candidates[_candidateId].name,
-            candidates[_candidateId].voteCount
-        );
+        Candidate memory c = candidates[_id];
+        return (c.id, c.name, c.party, c.manifesto, c.voteCount);
     }
 }
