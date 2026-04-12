@@ -25,42 +25,75 @@ export default function Home() {
   const [voterAddress, setVoterAddress] = useState("");
   const [selectedCandidateId, setSelectedCandidateId] = useState("");
 
-  useEffect(() => {
+ useEffect(() => {
   const init = async () => {
     try {
-      let provider = null;
-
-      if (window.ethereum?.providers?.length) {
-        provider =
-          window.ethereum.providers.find((p) => p.isMetaMask) ||
-          window.ethereum.providers[0];
-      } else if (window.ethereum?.isMetaMask) {
-        provider = window.ethereum;
-      }
-
-      if (!provider) {
-        setMessage("MetaMask not detected.");
+      if (!window.ethereum) {
+        setMessage("MetaMask not detected");
         setLoading(false);
         return;
       }
 
+      const provider = window.ethereum;
+
+      console.log("window.ethereum:", provider);
+      console.log("isMetaMask:", provider.isMetaMask);
+      console.log("selectedAddress:", provider.selectedAddress);
+
+      try {
+  await provider.request({
+    method: "wallet_switchEthereumChain",
+    params: [{ chainId: "0x539" }], // 1337 in hex
+  });
+} catch (switchError) {
+  if (switchError.code === 4902) {
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: "0x539",
+          chainName: "Ganache Local",
+          rpcUrls: ["http://127.0.0.1:7545"],
+          nativeCurrency: {
+            name: "ETH",
+            symbol: "ETH",
+            decimals: 18,
+          },
+        },
+      ],
+    });
+  } else {
+    throw switchError;
+  }
+}
+
+const accounts = await provider.request({
+  method: "eth_requestAccounts",
+});
+
+      const chainId = await provider.request({ method: "eth_chainId" });
+      const netVersion = await provider.request({ method: "net_version" });
+
+      console.log("Detected chain id:", chainId);
+      console.log("Detected net_version:", netVersion);
+      console.log(
+        "Available contract networks:",
+        Object.keys(VotingContract.networks || {})
+      );
+
       const web3 = new Web3(provider);
-      const accounts = await provider.request({
-        method: "eth_requestAccounts",
-      });
 
-      const networkId = await web3.eth.net.getId();
-      console.log("Detected network id:", networkId);
-      console.log("Available contract networks:", Object.keys(VotingContract.networks || {}));
+      let deployedNetwork = null;
 
-      const deployedNetwork =
-        VotingContract.networks?.[networkId] ||
-        VotingContract.networks?.["5777"] ||
-        VotingContract.networks?.["1337"];
+      if (chainId === "0x539") {
+        deployedNetwork = VotingContract.networks?.["5777"];
+      } else {
+        deployedNetwork = VotingContract.networks?.[netVersion];
+      }
 
       if (!deployedNetwork) {
         setMessage(
-          `Contract not deployed on current network. Detected network id: ${networkId}`
+          `Contract not deployed on current network. chainId=${chainId}, net_version=${netVersion}`
         );
         setLoading(false);
         return;
@@ -72,8 +105,8 @@ export default function Home() {
       );
 
       console.log("Using contract address:", deployedNetwork.address);
-console.log("Contract name from JSON:", VotingContract.contractName);
-console.log("Available methods:", Object.keys(instance.methods));
+      console.log("Contract name from JSON:", VotingContract.contractName);
+      console.log("Available methods:", Object.keys(instance.methods));
 
       const currentAccount = accounts[0];
       const adminAddress = await instance.methods.admin().call();
@@ -82,11 +115,11 @@ console.log("Available methods:", Object.keys(instance.methods));
       setContract(instance);
       setAdmin(adminAddress);
       setIsAdmin(adminAddress.toLowerCase() === currentAccount.toLowerCase());
-
+      setMessage("Connected successfully");
       setLoading(false);
     } catch (error) {
       console.error(error);
-      setMessage(error.message);
+      setMessage(error.message || "Failed to connect");
       setLoading(false);
     }
   };
