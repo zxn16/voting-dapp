@@ -4,22 +4,37 @@ import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import { Stack } from "@mui/material";
 
-export default function VotersForm({ contract, web3, currentAccount }) {
-  const [name, setName] = useState("");
+export default function VotersForm({
+  contract,
+  currentAccount,
+  onSuccess,
+  setMessage,
+}) {
+  const [walletAddress, setWalletAddress] = useState("");
 
   const handleForm = async (event) => {
     event.preventDefault();
-    try {
-      await contract.methods.addVoter(name).send({ from: currentAccount });
-      console.log("voter added");
-    } catch (error) {
-      console.log(error);
-    }
-    setName("");
-  };
 
-  const handleNameChange = (event) => {
-    setName(event.target.value);
+    try {
+      if (!walletAddress.trim()) {
+        setMessage("Wallet address is required");
+        return;
+      }
+
+      await contract.methods
+        .addVoter(walletAddress)
+        .send({ from: currentAccount });
+
+      setMessage("Voter added successfully");
+      setWalletAddress("");
+
+      if (onSuccess) {
+        await onSuccess();
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Failed to add voter");
+    }
   };
 
   return (
@@ -37,11 +52,10 @@ export default function VotersForm({ contract, web3, currentAccount }) {
     >
       <Stack spacing={2}>
         <TextField
-          id="outlined-basic"
-          label="Voters Address"
+          label="Voter Address"
           variant="outlined"
-          value={name}
-          onChange={handleNameChange}
+          value={walletAddress}
+          onChange={(e) => setWalletAddress(e.target.value)}
         />
         <Button variant="contained" type="submit">
           Add Voter

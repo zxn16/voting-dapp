@@ -4,6 +4,7 @@ import Grid from "@mui/material/Grid";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
+import Alert from "@mui/material/Alert";
 
 import Radio from "@mui/material/Radio";
 import RadioGroup from "@mui/material/RadioGroup";
@@ -12,47 +13,52 @@ import FormControl from "@mui/material/FormControl";
 
 import Candidate from "../components/CandidateCard";
 
-export default function Vote({ role, contract, web3, currentAccount }) {
-  // const [loading, setLoading] = useState(true);
+export default function Vote({ contract, currentAccount }) {
   const [candidates, setCandidates] = useState([]);
-  const [vote, setVote] = useState(null);
+  const [vote, setVote] = useState("");
   const [electionState, setElectionState] = useState(0);
-
-  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [electionTitle, setElectionTitle] = useState("");
+  const [electionStartDate, setElectionStartDate] = useState(0);
+  const [electionEndDate, setElectionEndDate] = useState(0);
 
   const getCandidates = async () => {
-    if (contract) {
-      const count = await contract.methods.candidatesCount().call();
-      const temp = [];
-      for (let i = 0; i < count; i++) {
-        const candidate = await contract.methods.getCandidateDetails(i).call();
-        temp.push({ name: candidate[0], votes: candidate[1] });
-      }
-      setCandidates(temp);
-      // setLoading(false);
-    }
-  };
+    if (!contract) return;
 
-  const voteCandidate = async (candidate) => {
-    try {
-      if (contract) {
-        await contract.methods.vote(candidate).send({ from: currentAccount });
-        getCandidates();
-      }
-    } catch (error) {
-      console.error("Error:", error);
+    const count = await contract.methods.candidatesCount().call();
+    const temp = [];
+
+    for (let i = 0; i < Number(count); i++) {
+      const candidate = await contract.methods.getCandidateDetails(i).call();
+      temp.push({
+        id: candidate[0],
+        name: candidate[1],
+        party: candidate[2],
+        manifesto: candidate[3],
+        votes: candidate[4],
+      });
     }
+
+    setCandidates(temp);
   };
 
   const getElectionState = async () => {
-    if (contract) {
-      const state = await contract.methods.electionState().call();
-      setElectionState(parseInt(state));
-    }
+    if (!contract) return;
+    const state = await contract.methods.electionState().call();
+    setElectionState(Number(state));
+  };
+
+  const getElectionDetails = async () => {
+    if (!contract) return;
+    const details = await contract.methods.getElectionDetails().call();
+    setElectionTitle(details[0]);
+    setElectionStartDate(Number(details[1]));
+    setElectionEndDate(Number(details[2]));
   };
 
   useEffect(() => {
     getElectionState();
+    getElectionDetails();
     getCandidates();
   }, [contract]);
 
@@ -60,91 +66,129 @@ export default function Vote({ role, contract, web3, currentAccount }) {
     setVote(event.target.value);
   };
 
-  const handleVote = (event) => {
+  const handleVote = async (event) => {
     event.preventDefault();
-    voteCandidate(vote);
+
+    try {
+      if (vote === "") {
+        setMessage("Please select a candidate");
+        return;
+      }
+
+      await contract.methods.vote(vote).send({ from: currentAccount });
+      setMessage("Vote cast successfully");
+      await getCandidates();
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Voting failed");
+    }
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "-";
+    return new Date(timestamp * 1000).toLocaleString();
   };
 
   return (
-    <Box>
+    <Box sx={{ maxWidth: 1200, mx: "auto" }}>
+      <Box
+        sx={{
+          maxWidth: 900,
+          mx: "auto",
+          mb: 4,
+          p: 3,
+          borderRadius: 2,
+          bgcolor: "rgba(255,255,255,0.04)",
+        }}
+      >
+        <Typography variant="h5" sx={{ mb: 2 }}>
+          {electionTitle || "Election"}
+        </Typography>
+        <Typography sx={{ mb: 1 }}>
+          <strong>Start Date:</strong> {formatDate(electionStartDate)}
+        </Typography>
+        <Typography>
+          <strong>End Date:</strong> {formatDate(electionEndDate)}
+        </Typography>
+      </Box>
+
       <form onSubmit={handleVote}>
         <Grid container sx={{ mt: 0 }} spacing={6} justifyContent="center">
           <Grid item xs={12}>
             <Typography align="center" variant="h6">
               {electionState === 0 &&
-                "Please Wait... Election has not started yet."}
+                "Please wait. Election has not started yet."}
               {electionState === 1 && "VOTE FOR YOUR FAVOURITE CANDIDATE"}
               {electionState === 2 &&
                 "Election has ended. See the results below."}
             </Typography>
             <Divider />
           </Grid>
+
+          {message && (
+            <Grid item xs={12} md={8}>
+              <Alert severity="info">{message}</Alert>
+            </Grid>
+          )}
+
           {electionState === 1 && (
             <>
               <Grid item xs={12}>
-                <FormControl>
+                <FormControl sx={{ width: "100%" }}>
                   <RadioGroup
                     row
-                    sx={{
-                      overflowY: "hidden",
-                      overflowX: "auto",
-                      display: "flex",
-                      width: "98vw",
-                      justifyContent: "center",
-                    }}
                     value={vote}
                     onChange={handleVoteChange}
+                    sx={{
+                      justifyContent: "center",
+                      gap: 2,
+                      flexWrap: "wrap",
+                    }}
                   >
-                    {candidates.map((candidate, index) => (
+                    {candidates.map((candidate) => (
                       <FormControlLabel
-                        key={index}
-                        labelPlacement="top"
+                        key={candidate.id}
+                        value={String(candidate.id)}
                         control={<Radio />}
-                        value={index}
-                        label={<Candidate id={index} name={candidate.name} />}
+                        label={`${candidate.name} (${candidate.party || "Independent"})`}
                       />
                     ))}
                   </RadioGroup>
                 </FormControl>
               </Grid>
-              <Grid item xs={6}>
-                <div style={{ margin: 20 }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    sx={{ width: "100%" }}
-                  >
-                    Vote
-                  </Button>
-                </div>
+
+              <Grid item xs={12} sx={{ display: "flex", justifyContent: "center" }}>
+                <Button variant="contained" type="submit">
+                  Submit Vote
+                </Button>
               </Grid>
             </>
           )}
 
-          {electionState === 2 && (
-            <Grid
-              item
-              xs={12}
-              sx={{
-                overflowY: "hidden",
-                overflowX: "auto",
-                display: "flex",
-                width: "98vw",
-                justifyContent: "center",
-              }}
-            >
-              {candidates &&
-                candidates.map((candidate, index) => (
-                  <Box sx={{ mx: 2 }} key={index}>
-                    <Candidate
-                      id={index}
-                      name={candidate.name}
-                      voteCount={candidate.votes}
-                    />
-                  </Box>
-                ))}
-            </Grid>
-          )}
+          <Grid
+            item
+            xs={12}
+            sx={{
+              overflowY: "hidden",
+              overflowX: "auto",
+              display: "flex",
+              width: "98vw",
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {candidates.map((candidate) => (
+              <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
+                <Candidate
+                  id={candidate.id}
+                  name={candidate.name}
+                  party={candidate.party}
+                  manifesto={candidate.manifesto}
+                  voteCount={electionState === 2 ? candidate.votes : null}
+                />
+              </Box>
+            ))}
+          </Grid>
         </Grid>
       </form>
     </Box>

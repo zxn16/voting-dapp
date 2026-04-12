@@ -8,43 +8,73 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
+import Alert from "@mui/material/Alert";
+import TextField from "@mui/material/TextField";
+import Stack from "@mui/material/Stack";
 
 import Candidate from "../components/CandidateCard";
 import CandidateForm from "../components/CandidateForm";
 import VotersForm from "../components/VotersForm";
 
-export default function Admin({ role, contract, web3, currentAccount }) {
+export default function Admin({ contract, currentAccount }) {
   const [electionState, setElectionState] = useState(0);
   const [loading, setLoading] = useState(true);
   const [candidates, setCandidates] = useState([]);
-
   const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const [electionTitle, setElectionTitle] = useState("");
+  const [electionStartDate, setElectionStartDate] = useState("");
+  const [electionEndDate, setElectionEndDate] = useState("");
+
+  const [savedElectionTitle, setSavedElectionTitle] = useState("");
+  const [savedElectionStartDate, setSavedElectionStartDate] = useState(0);
+  const [savedElectionEndDate, setSavedElectionEndDate] = useState(0);
 
   const getCandidates = async () => {
-    if (contract) {
-      console.log(contract);
-      const count = await contract.methods.candidatesCount().call();
-      const temp = [];
-      for (let i = 0; i < count; i++) {
-        const candidate = await contract.methods.getCandidateDetails(i).call();
-        temp.push({ name: candidate[0], votes: candidate[1] });
-      }
-      setCandidates(temp);
-      setLoading(false);
-      console.log(temp);
+    if (!contract) return;
+
+    const count = await contract.methods.candidatesCount().call();
+    const temp = [];
+
+    for (let i = 0; i < Number(count); i++) {
+      const candidate = await contract.methods.getCandidateDetails(i).call();
+      temp.push({
+        id: candidate[0],
+        name: candidate[1],
+        party: candidate[2],
+        manifesto: candidate[3],
+        votes: candidate[4],
+      });
     }
+
+    setCandidates(temp);
   };
 
   const getElectionState = async () => {
-    if (contract) {
-      const state = await contract.methods.electionState().call();
-      setElectionState(parseInt(state));
-    }
+    if (!contract) return;
+    const state = await contract.methods.electionState().call();
+    setElectionState(Number(state));
+  };
+
+  const getElectionDetails = async () => {
+    if (!contract) return;
+
+    const details = await contract.methods.getElectionDetails().call();
+    setSavedElectionTitle(details[0]);
+    setSavedElectionStartDate(Number(details[1]));
+    setSavedElectionEndDate(Number(details[2]));
+  };
+
+  const refreshData = async () => {
+    await getElectionState();
+    await getElectionDetails();
+    await getCandidates();
+    setLoading(false);
   };
 
   useEffect(() => {
-    getElectionState();
-    getCandidates();
+    refreshData();
   }, [contract]);
 
   const handleEnd = () => {
@@ -56,44 +86,79 @@ export default function Admin({ role, contract, web3, currentAccount }) {
   };
 
   const handleAgree = async () => {
-    if (electionState === 0) {
-      try {
-        if (contract) {
-          await contract.methods.startElection().send({ from: currentAccount });
-          getElectionState();
-        }
-      } catch (error) {
-        console.error("Error:", error);
+    try {
+      if (electionState === 0) {
+        await contract.methods.startElection().send({ from: currentAccount });
+        setMessage("Election started successfully");
+      } else if (electionState === 1) {
+        await contract.methods.endElection().send({ from: currentAccount });
+        setMessage("Election ended successfully");
       }
-    } else if (electionState === 1) {
-      try {
-        if (contract) {
-          await contract.methods.endElection().send({ from: currentAccount });
-          getElectionState();
-        }
-      } catch (error) {
-        console.error("Error:", error);
-      }
+
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Transaction failed");
     }
 
     setOpen(false);
   };
 
+  const handleSaveElectionSettings = async (event) => {
+    event.preventDefault();
+
+    try {
+      if (!electionTitle.trim()) {
+        setMessage("Election title is required");
+        return;
+      }
+
+      if (!electionStartDate || !electionEndDate) {
+        setMessage("Start and end dates are required");
+        return;
+      }
+
+      const startTimestamp = Math.floor(new Date(electionStartDate).getTime() / 1000);
+      const endTimestamp = Math.floor(new Date(electionEndDate).getTime() / 1000);
+
+      await contract.methods
+        .configureElection(electionTitle, startTimestamp, endTimestamp)
+        .send({ from: currentAccount });
+
+      setMessage("Election settings saved successfully");
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      setMessage(error.message || "Failed to save election settings");
+    }
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return "-";
+    return new Date(timestamp * 1000).toLocaleString();
+  };
+
   return (
-    <Box>
+    <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       {loading ? (
         <Box
           sx={{
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            height: "80vh",
+            height: "60vh",
           }}
         >
           Loading...
         </Box>
       ) : (
         <Box>
+          {message && (
+            <Alert sx={{ mb: 3 }} severity="info">
+              {message}
+            </Alert>
+          )}
+
           <Grid container sx={{ mt: 0 }} spacing={4}>
             <Grid item xs={12}>
               <Typography align="center" variant="h6" color="textSecondary">
@@ -104,6 +169,65 @@ export default function Admin({ role, contract, web3, currentAccount }) {
               </Typography>
               <Divider />
             </Grid>
+
+            <Grid item xs={12}>
+              <Box
+                sx={{
+                  maxWidth: 900,
+                  mx: "auto",
+                  p: 3,
+                  borderRadius: 2,
+                  bgcolor: "rgba(255,255,255,0.04)",
+                }}
+              >
+                <Typography variant="h5" sx={{ mb: 2 }}>
+                  Election Details
+                </Typography>
+
+                <Typography sx={{ mb: 1 }}>
+                  <strong>Title:</strong> {savedElectionTitle || "-"}
+                </Typography>
+                <Typography sx={{ mb: 1 }}>
+                  <strong>Start Date:</strong> {formatDate(savedElectionStartDate)}
+                </Typography>
+                <Typography sx={{ mb: 2 }}>
+                  <strong>End Date:</strong> {formatDate(savedElectionEndDate)}
+                </Typography>
+
+                {electionState === 0 && (
+                  <Box component="form" onSubmit={handleSaveElectionSettings}>
+                    <Stack spacing={2}>
+                      <TextField
+                        label="Election Title"
+                        value={electionTitle}
+                        onChange={(e) => setElectionTitle(e.target.value)}
+                        fullWidth
+                      />
+                      <TextField
+                        label="Start Date"
+                        type="datetime-local"
+                        value={electionStartDate}
+                        onChange={(e) => setElectionStartDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        fullWidth
+                      />
+                      <TextField
+                        label="End Date"
+                        type="datetime-local"
+                        value={electionEndDate}
+                        onChange={(e) => setElectionEndDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        fullWidth
+                      />
+                      <Button variant="contained" type="submit">
+                        Save Election Settings
+                      </Button>
+                    </Stack>
+                  </Box>
+                )}
+              </Box>
+            </Grid>
+
             {electionState !== 2 && (
               <Grid item xs={12} sx={{ display: "flex" }}>
                 <Button
@@ -127,37 +251,77 @@ export default function Admin({ role, contract, web3, currentAccount }) {
             </Grid>
 
             {electionState === 0 && (
-              <Grid
-                item
-                xs={12}
-                sx={{
-                  overflowY: "hidden",
-                  overflowX: "auto",
-                  display: "flex",
-                  width: "98vw",
-                  justifyContent: "center",
-                }}
-              >
-                <Box
+              <>
+                <Grid
+                  item
+                  xs={12}
                   sx={{
+                    overflowY: "hidden",
+                    overflowX: "auto",
                     display: "flex",
-                    flexDirection: "column",
-                    width: "100%",
-                    alignItems: "center",
+                    width: "98vw",
+                    justifyContent: "center",
                   }}
                 >
-                  <VotersForm
-                    contract={contract}
-                    web3={web3}
-                    currentAccount={currentAccount}
-                  />
-                  <CandidateForm
-                    contract={contract}
-                    web3={web3}
-                    currentAccount={currentAccount}
-                  />
-                </Box>
-              </Grid>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                      alignItems: "center",
+                    }}
+                  >
+                    <VotersForm
+                      contract={contract}
+                      currentAccount={currentAccount}
+                      onSuccess={refreshData}
+                      setMessage={setMessage}
+                    />
+                    <CandidateForm
+                      contract={contract}
+                      currentAccount={currentAccount}
+                      onSuccess={refreshData}
+                      setMessage={setMessage}
+                    />
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography align="center" variant="h6">
+                    CURRENT CANDIDATES
+                  </Typography>
+                  <Divider />
+                </Grid>
+
+                <Grid
+                  item
+                  xs={12}
+                  sx={{
+                    overflowY: "hidden",
+                    overflowX: "auto",
+                    display: "flex",
+                    width: "98vw",
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {candidates.length === 0 ? (
+                    <Typography align="center">No candidates added yet.</Typography>
+                  ) : (
+                    candidates.map((candidate) => (
+                      <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
+                        <Candidate
+                          id={candidate.id}
+                          name={candidate.name}
+                          party={candidate.party}
+                          manifesto={candidate.manifesto}
+                          voteCount={null}
+                        />
+                      </Box>
+                    ))
+                  )}
+                </Grid>
+              </>
             )}
 
             {electionState > 0 && (
@@ -170,30 +334,27 @@ export default function Admin({ role, contract, web3, currentAccount }) {
                   display: "flex",
                   width: "98vw",
                   justifyContent: "center",
+                  flexWrap: "wrap",
                 }}
               >
-                {candidates &&
-                  candidates.map((candidate, index) => (
-                    <Box sx={{ mx: 2 }} key={index}>
-                      <Candidate
-                        id={index}
-                        name={candidate.name}
-                        voteCount={candidate.votes}
-                      />
-                    </Box>
-                  ))}
+                {candidates.map((candidate) => (
+                  <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
+                    <Candidate
+                      id={candidate.id}
+                      name={candidate.name}
+                      party={candidate.party}
+                      manifesto={candidate.manifesto}
+                      voteCount={candidate.votes}
+                    />
+                  </Box>
+                ))}
               </Grid>
             )}
           </Grid>
 
-          <Dialog
-            open={open}
-            onClose={handleClose}
-            aria-labelledby="alert-dialog-title"
-            aria-describedby="alert-dialog-description"
-          >
+          <Dialog open={open} onClose={handleClose}>
             <DialogContent>
-              <DialogContentText id="alert-dialog-description">
+              <DialogContentText>
                 {electionState === 0 && "Do you want to start the election?"}
                 {electionState === 1 && "Do you want to end the election?"}
               </DialogContentText>
