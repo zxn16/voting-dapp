@@ -66,6 +66,24 @@ export default function Admin({ contract, currentAccount }) {
     setSavedElectionEndDate(Number(details[2]));
   };
 
+  const getWinner = () => {
+    if (candidates.length === 0) return null;
+
+    let winner = candidates[0];
+
+    for (let i = 1; i < candidates.length; i++) {
+      if (Number(candidates[i].votes) > Number(winner.votes)) {
+        winner = candidates[i];
+      }
+    }
+
+    return winner;
+  };
+
+  const getTotalVotes = () => {
+    return candidates.reduce((sum, c) => sum + Number(c.votes || 0), 0);
+  };
+
   const refreshData = async () => {
     await getElectionState();
     await getElectionDetails();
@@ -118,8 +136,12 @@ export default function Admin({ contract, currentAccount }) {
         return;
       }
 
-      const startTimestamp = Math.floor(new Date(electionStartDate).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(electionEndDate).getTime() / 1000);
+      const startTimestamp = Math.floor(
+        new Date(electionStartDate).getTime() / 1000
+      );
+      const endTimestamp = Math.floor(
+        new Date(electionEndDate).getTime() / 1000
+      );
 
       await contract.methods
         .configureElection(electionTitle, startTimestamp, endTimestamp)
@@ -176,11 +198,13 @@ export default function Admin({ contract, currentAccount }) {
                   maxWidth: 900,
                   mx: "auto",
                   p: 3,
-                  borderRadius: 2,
-                  bgcolor: "rgba(255,255,255,0.04)",
+                  borderRadius: 3,
+                  bgcolor: "rgba(255,255,255,0.06)",
+                  backdropFilter: "blur(10px)",
+                  boxShadow: 4,
                 }}
               >
-                <Typography variant="h5" sx={{ mb: 2 }}>
+                <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
                   Election Details
                 </Typography>
 
@@ -188,7 +212,8 @@ export default function Admin({ contract, currentAccount }) {
                   <strong>Title:</strong> {savedElectionTitle || "-"}
                 </Typography>
                 <Typography sx={{ mb: 1 }}>
-                  <strong>Start Date:</strong> {formatDate(savedElectionStartDate)}
+                  <strong>Start Date:</strong>{" "}
+                  {formatDate(savedElectionStartDate)}
                 </Typography>
                 <Typography sx={{ mb: 2 }}>
                   <strong>End Date:</strong> {formatDate(savedElectionEndDate)}
@@ -219,7 +244,16 @@ export default function Admin({ contract, currentAccount }) {
                         InputLabelProps={{ shrink: true }}
                         fullWidth
                       />
-                      <Button variant="contained" type="submit">
+                      <Button
+                        variant="contained"
+                        type="submit"
+                        sx={{
+                          borderRadius: 3,
+                          fontWeight: "bold",
+                          px: 4,
+                          py: 1.5,
+                        }}
+                      >
                         Save Election Settings
                       </Button>
                     </Stack>
@@ -232,7 +266,14 @@ export default function Admin({ contract, currentAccount }) {
               <Grid item xs={12} sx={{ display: "flex" }}>
                 <Button
                   variant="contained"
-                  sx={{ width: "40%", margin: "auto" }}
+                  sx={{
+                    width: "40%",
+                    margin: "auto",
+                    borderRadius: 3,
+                    fontWeight: "bold",
+                    px: 4,
+                    py: 1.5,
+                  }}
                   onClick={handleEnd}
                 >
                   {electionState === 0 && "Start Election"}
@@ -242,7 +283,7 @@ export default function Admin({ contract, currentAccount }) {
             )}
 
             <Grid item xs={12}>
-              <Typography align="center" variant="h6">
+              <Typography align="center" variant="h6" sx={{ fontWeight: 700 }}>
                 {electionState === 0 && "ADD VOTERS / CANDIDATES"}
                 {electionState === 1 && "SEE LIVE RESULTS"}
                 {electionState === 2 && "FINAL ELECTION RESULT"}
@@ -287,7 +328,7 @@ export default function Admin({ contract, currentAccount }) {
                 </Grid>
 
                 <Grid item xs={12}>
-                  <Typography align="center" variant="h6">
+                  <Typography align="center" variant="h6" sx={{ fontWeight: 700 }}>
                     CURRENT CANDIDATES
                   </Typography>
                   <Divider />
@@ -306,7 +347,9 @@ export default function Admin({ contract, currentAccount }) {
                   }}
                 >
                   {candidates.length === 0 ? (
-                    <Typography align="center">No candidates added yet.</Typography>
+                    <Typography align="center">
+                      No candidates added yet.
+                    </Typography>
                   ) : (
                     candidates.map((candidate) => (
                       <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
@@ -316,6 +359,7 @@ export default function Admin({ contract, currentAccount }) {
                           party={candidate.party}
                           manifesto={candidate.manifesto}
                           voteCount={null}
+                          totalVotes={getTotalVotes()}
                         />
                       </Box>
                     ))
@@ -325,30 +369,49 @@ export default function Admin({ contract, currentAccount }) {
             )}
 
             {electionState > 0 && (
-              <Grid
-                item
-                xs={12}
-                sx={{
-                  overflowY: "hidden",
-                  overflowX: "auto",
-                  display: "flex",
-                  width: "98vw",
-                  justifyContent: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                {candidates.map((candidate) => (
-                  <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
-                    <Candidate
-                      id={candidate.id}
-                      name={candidate.name}
-                      party={candidate.party}
-                      manifesto={candidate.manifesto}
-                      voteCount={candidate.votes}
-                    />
-                  </Box>
-                ))}
-              </Grid>
+              <>
+                {electionState === 2 && getWinner() && (
+                  <Grid item xs={12}>
+                    <Box sx={{ textAlign: "center", mb: 2 }}>
+                      <Typography
+                        variant="h4"
+                        sx={{ fontWeight: "bold", color: "#4caf50" }}
+                      >
+                        🏆 Winner: {getWinner().name}
+                      </Typography>
+                      <Typography variant="body1">
+                        Total Votes: {getTotalVotes()}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                )}
+
+                <Grid
+                  item
+                  xs={12}
+                  sx={{
+                    overflowY: "hidden",
+                    overflowX: "auto",
+                    display: "flex",
+                    width: "98vw",
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {candidates.map((candidate) => (
+                    <Box sx={{ mx: 2, my: 2 }} key={candidate.id}>
+                      <Candidate
+                        id={candidate.id}
+                        name={candidate.name}
+                        party={candidate.party}
+                        manifesto={candidate.manifesto}
+                        voteCount={candidate.votes}
+                        totalVotes={getTotalVotes()}
+                      />
+                    </Box>
+                  ))}
+                </Grid>
+              </>
             )}
           </Grid>
 

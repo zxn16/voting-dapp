@@ -89,6 +89,10 @@ export default function Vote({ contract, currentAccount }) {
     return new Date(timestamp * 1000).toLocaleString();
   };
 
+  const getTotalVotes = () => {
+    return candidates.reduce((sum, c) => sum + Number(c.votes || 0), 0);
+  };
+
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto" }}>
       <Box
@@ -97,11 +101,13 @@ export default function Vote({ contract, currentAccount }) {
           mx: "auto",
           mb: 4,
           p: 3,
-          borderRadius: 2,
-          bgcolor: "rgba(255,255,255,0.04)",
+          borderRadius: 3,
+          bgcolor: "rgba(255,255,255,0.06)",
+          backdropFilter: "blur(10px)",
+          boxShadow: 4,
         }}
       >
-        <Typography variant="h5" sx={{ mb: 2 }}>
+        <Typography variant="h5" sx={{ mb: 2, fontWeight: "bold" }}>
           {electionTitle || "Election"}
         </Typography>
         <Typography sx={{ mb: 1 }}>
@@ -115,7 +121,7 @@ export default function Vote({ contract, currentAccount }) {
       <form onSubmit={handleVote}>
         <Grid container sx={{ mt: 0 }} spacing={6} justifyContent="center">
           <Grid item xs={12}>
-            <Typography align="center" variant="h6">
+            <Typography align="center" variant="h6" sx={{ fontWeight: 700 }}>
               {electionState === 0 &&
                 "Please wait. Election has not started yet."}
               {electionState === 1 && "VOTE FOR YOUR FAVOURITE CANDIDATE"}
@@ -150,15 +156,30 @@ export default function Vote({ contract, currentAccount }) {
                         key={candidate.id}
                         value={String(candidate.id)}
                         control={<Radio />}
-                        label={`${candidate.name} (${candidate.party || "Independent"})`}
+                        label={`${candidate.name} (${
+                          candidate.party || "Independent"
+                        })`}
                       />
                     ))}
                   </RadioGroup>
                 </FormControl>
               </Grid>
 
-              <Grid item xs={12} sx={{ display: "flex", justifyContent: "center" }}>
-                <Button variant="contained" type="submit">
+              <Grid
+                item
+                xs={12}
+                sx={{ display: "flex", justifyContent: "center" }}
+              >
+                <Button
+                  variant="contained"
+                  type="submit"
+                  sx={{
+                    borderRadius: 3,
+                    fontWeight: "bold",
+                    px: 4,
+                    py: 1.5,
+                  }}
+                >
                   Submit Vote
                 </Button>
               </Grid>
@@ -185,6 +206,7 @@ export default function Vote({ contract, currentAccount }) {
                   party={candidate.party}
                   manifesto={candidate.manifesto}
                   voteCount={electionState === 2 ? candidate.votes : null}
+                  totalVotes={getTotalVotes()}
                 />
               </Box>
             ))}
